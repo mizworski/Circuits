@@ -3,5 +3,5 @@ project(PwZadanie3)
 
 set(CMAKE_C_STANDARD 99)
 
-set(SOURCE_FILES main.c err.c err.h circuit.c)
-add_executable(PwZadanie3 ${SOURCE_FILES})
+set(SOURCE_FILES err.c err.h)
+add_executable(PwZadanie3 ${SOURCE_FILES} circuit.c)
