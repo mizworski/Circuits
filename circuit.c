@@ -1,35 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/wait.h>
 #include <string.h>
 
 #include "circuit.h"
-#include "err.h"
 
 int variables_in[2137];
 int variables_out[2137];
 
-circuit_node *parse_expression(char *expression, size_t expression_length) {
-    if (expression == NULL) {
-        return NULL;
-    }
+void set_variables(unsigned int variables_count, dnode *variables);
 
-    if (expression[0] == '(') {
-        if (expression[1] == '-') {
-            return parse_unary_operation(expression, expression_length);
-        } else {
-            return prase_binary_operation(expression, expression_length);
-        }
-    } else if (*expression == 'x') {
-        return prase_variable(expression);
-    } else {
-        return parse_value(expression);
-    }
-}
-
-circuit_node *prase_binary_operation(char *expression, size_t expression_length) {
-    circuit_node *node = malloc(sizeof(circuit_node));
+enode *
+parse_binary_operation(char *expression,
+                       size_t expression_length,
+                       unsigned int dependent_variables[],
+                       unsigned int variables_count) {
+    enode *node = malloc(sizeof(enode));
 
     char *current_char = expression;
     char *left_expression_begin = expression + 1;
@@ -54,7 +40,7 @@ circuit_node *prase_binary_operation(char *expression, size_t expression_length)
     } while (opened_parentheses != 0 || operator_found == 0);
 
     if (*current_char == '+' || *current_char == '*') {
-        --left_expression_length; /// Counted characters inclucing space and operator
+        --left_expression_length; /// Counted characters includes space and operator
     } else {
         ++left_expression_length; /// Need to add null at the end of the string.
         current_char += 2;
@@ -73,25 +59,28 @@ circuit_node *prase_binary_operation(char *expression, size_t expression_length)
     left_expression[left_expression_length - 1] = 0;
     right_expression[right_expression_length - 1] = 0;
 
-    node->left_son = parse_expression(left_expression, left_expression_length);
-    node->right_son = parse_expression(right_expression, right_expression_length);
+    node->left_son = parse_expression(left_expression, left_expression_length, dependent_variables, variables_count);
+    node->right_son = parse_expression(right_expression, right_expression_length, dependent_variables, variables_count);
 
     return node;
 }
 
-circuit_node *prase_variable(const char *expression) {
-    circuit_node *node = malloc(sizeof(circuit_node));
+enode *parse_variable(const char *expression,
+                      unsigned int dependent_variables[]) {
+    enode *node = malloc(sizeof(enode));
 
     node->operation_code = VARIABLE_CODE;
     node->right_son = NULL;
     node->left_son = NULL;
     sscanf(expression, "x[%d]", &node->value);
 
+    dependent_variables[node->value] = 1;
+
     return node;
 }
 
-circuit_node *parse_value(const char *expression) {
-    circuit_node *node = malloc(sizeof(circuit_node));
+enode *parse_value(const char *expression) {
+    enode *node = malloc(sizeof(enode));
 
     node->operation_code = VALUE_CODE;
     node->right_son = NULL;
@@ -101,32 +90,89 @@ circuit_node *parse_value(const char *expression) {
     return node;
 }
 
-circuit_node *parse_unary_operation(const char *expression, size_t expression_length) {
-    circuit_node *node = malloc(sizeof(circuit_node));
+enode *parse_unary_operation(char *expression,
+                             size_t expression_length,
+                             unsigned int dependent_variables[],
+                             unsigned int variables_count) {
+    enode *node = malloc(sizeof(enode));
 
     char *new_expression = NULL;
     node->operation_code = '-';
     size_t new_expression_length = expression_length - 3;
-    new_expression = malloc(new_expression_length * sizeof(char)); // todo sizeof(char) == 1?
+    new_expression = malloc(new_expression_length * sizeof(char));
     strncpy(new_expression, expression + 2, new_expression_length);
-    node->left_son = parse_expression(new_expression, new_expression_length);
+    node->left_son = parse_expression(new_expression, new_expression_length, dependent_variables, variables_count);
+    return node;
+}
+
+enode *parse_expression(char *expression,
+                        size_t expression_length,
+                        unsigned int dependent_variables[],
+                        unsigned int variables_count) {
+    if (expression == NULL) {
+        return NULL;
+    }
+
+    if (expression[0] == '(') {
+        if (expression[1] == '-') {
+            return parse_unary_operation(expression, expression_length, dependent_variables, variables_count);
+        } else {
+            return parse_binary_operation(expression, expression_length, dependent_variables, variables_count);
+        }
+    } else if (*expression == 'x') {
+        return parse_variable(expression, dependent_variables);
+    } else {
+        return parse_value(expression);
+    }
+}
+
+dnode *parse_single_equation(char *expression, size_t expression_length, dnode *variables, unsigned int variables_count) {
+    unsigned int dependent_variables[variables_count];
+    memset(dependent_variables, 0, sizeof dependent_variables);
+    int variable_index;
+    sscanf(expression, "x[%d]", &variable_index);
+
+    dnode *node = malloc(sizeof(dnode));
+
+    expression += 7;
+    expression_length -= 7;
+
+    node->expression = parse_expression(expression,
+                                              expression_length,
+                                              dependent_variables,
+                                              variables_count);
+
+    dlist **tail = &node->dependent_variables;
+
+    for (int i = 0; i < variables_count; ++i) {
+        if (dependent_variables[i] == 1) {
+            dlist *new_list = malloc(sizeof(dlist));
+            new_list->variable = &variables[i];
+
+            *tail = new_list;
+            tail = &new_list->next;
+        }
+    }
+
+    *tail = NULL;
+
     return node;
 }
 
 int main() {
     // todo read input
-    int input_length = 10;
-    int circuit_equations_number = 10;
-    int variables_number = 10;
+    unsigned int input_length = 10;
+    unsigned int circuit_equations_number = 10;
+    unsigned int variables_count = 10;
 
     // PRE-PROCESSING
 
     // todo initialize pipes for variables
     // todo for now all variables pipes are visible to others, can be reduced to initialize them traversing dependency tree
-    int vars_in[variables_number][2];
-    int vars_out[variables_number][2];
+    int vars_in[variables_count][2];
+    int vars_out[variables_count][2];
 
-    for (int i = 0; i < variables_number; ++i) {
+    for (int i = 0; i < variables_count; ++i) {
         if (pipe(vars_in[i]) == -1) {
             syserr("Error in pipe\n");
         }
@@ -137,6 +183,10 @@ int main() {
     }
 
     // todo parse input to structure
+
+    dnode variables[variables_count];
+
+    set_variables(variables_count, variables);
 
     int which_variable = 1;
 
@@ -152,7 +202,7 @@ int main() {
     expression_length = (size_t) read;
     expression[expression_length - 1] = 0;
 
-    circuit_node *circuit = parse_expression(expression, expression_length);
+    dnode *circuit = parse_single_equation(expression, expression_length, variables, variables_count);
 
     // todo create dependency tree
 
@@ -175,4 +225,12 @@ int main() {
     // todo free allocated memory
 
     return 0;
+}
+
+void set_variables(unsigned int variables_count, dnode *variables) {
+    for (int i = 0; i < variables_count; ++i) {
+        variables[i].variable_name = i;
+        variables[i].dependent_variables = NULL;
+        variables[i].expression = NULL;
+    }
 }
