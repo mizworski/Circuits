@@ -3,121 +3,114 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <string.h>
+
+#include "circuit.h"
 #include "err.h"
 
 int variables_in[2137];
 int variables_out[2137];
 
-typedef struct circuit_node circuit_node;
-
-struct circuit_node {
-    // todo pipe-in
-    // todo pipe-out
-
-    int operation_code;
-    circuit_node *left_son; /// nodes that you are waiting for
-    circuit_node *right_son;
-    circuit_node *parent; /// nodes to receive your value
-};
-
-typedef struct circuit_variable_node cv_node;
-
-struct circuit_variable_node {
-    // todo
-//    int parents_ids[];
-};
-
-typedef struct dependency_tree_node dt_node;
-
-struct dependency_tree_node {
-    int variable_name;
-    dt_node *left_son;
-    dt_node *right_son;
-};
-
-circuit_node *parse_circuit(char *expression, size_t expression_length) {
+circuit_node *parse_expression(char *expression, size_t expression_length) {
     if (expression == NULL) {
         return NULL;
     }
 
+    if (expression[0] == '(') {
+        if (expression[1] == '-') {
+            return parse_unary_operation(expression, expression_length);
+        } else {
+            return prase_binary_operation(expression, expression_length);
+        }
+    } else if (*expression == 'x') {
+        return prase_variable(expression);
+    } else {
+        return parse_value(expression);
+    }
+}
+
+circuit_node *prase_binary_operation(char *expression, size_t expression_length) {
     circuit_node *node = malloc(sizeof(circuit_node));
+
+    char *current_char = expression;
+    char *left_expression_begin = expression + 1;
+    char *right_expression_begin;
 
     size_t left_expression_length = 0;
     size_t right_expression_length = 0;
 
-    char *left_expression = NULL;
-    char *right_expression = NULL;
+    int operator_found = 0;
+    unsigned int opened_parentheses = 0;
 
-    if (expression[0] == '(' && expression[1] == '-') {
-        node->operation_code = '-';
-        left_expression_length = expression_length - 3;
-        left_expression = malloc(left_expression_length * sizeof(char)); // todo sizeof(char) == 1?
-        strncpy(left_expression, expression + 2, left_expression_length);
-        node->left_son = parse_circuit(left_expression, left_expression_length);
-        return node;
-    }
-
-    char *current_char = expression;
-
-    if (*current_char == '(') {
-        unsigned int opened_parentheses = 0;
-
-        do {
-            if (*current_char == '(') {
-                ++opened_parentheses;
-            } else if (*current_char == ')') {
-                --opened_parentheses;
-            }
-            ++current_char;
-            ++left_expression_length;
-        } while (opened_parentheses != 0);
-
-        // additional space for string terminator
+    do {
+        ++current_char;
+        if (*current_char == '(') {
+            ++opened_parentheses;
+        } else if (*current_char == ')') {
+            --opened_parentheses;
+        } else if (*current_char == '+' || *current_char == '*') {
+            operator_found = 1;
+        }
         ++left_expression_length;
+    } while (opened_parentheses != 0 || operator_found == 0);
 
-        left_expression = malloc(left_expression_length);
-        strncpy(left_expression, expression + 1, left_expression_length);
-    } else if (*current_char == 'x') {
-
+    if (*current_char == '+' || *current_char == '*') {
+        --left_expression_length; /// Counted characters inclucing space and operator
     } else {
-
+        ++left_expression_length; /// Need to add null at the end of the string.
+        current_char += 2;
     }
-
-    // moving to operator
-    ++current_char;
-
     node->operation_code = *current_char;
 
-    // moving to next expression
-    ++current_char;
-    expression = current_char;
+    right_expression_begin = current_char + 2;
+    right_expression_length = (expression_length - (left_expression_length + 2)) - 2;
 
-    if (*current_char == '(') {
-        unsigned int opened_parentheses = 0;
+    char *left_expression = malloc(left_expression_length * sizeof(char));
+    char *right_expression = malloc(right_expression_length * sizeof(char));
 
-        do {
-            if (*current_char == '(') {
-                ++opened_parentheses;
-            } else if (*current_char == ')') {
-                --opened_parentheses;
-            }
-            ++current_char;
-            ++right_expression_length;
-        } while (opened_parentheses != 0);
+    strncpy(left_expression, left_expression_begin, left_expression_length);
+    strncpy(right_expression, right_expression_begin, right_expression_length);
 
-        // additional space for string terminator
-        ++right_expression_length;
+    left_expression[left_expression_length - 1] = 0;
+    right_expression[right_expression_length - 1] = 0;
 
-        right_expression = malloc(right_expression_length);
-        strncpy(right_expression, expression + 1, right_expression_length);
-    } else {
+    node->left_son = parse_expression(left_expression, left_expression_length);
+    node->right_son = parse_expression(right_expression, right_expression_length);
 
-    }
+    return node;
+}
 
-    node->left_son = parse_circuit(left_expression, left_expression_length);
-    node->right_son = parse_circuit(right_expression, right_expression_length);
+circuit_node *prase_variable(const char *expression) {
+    circuit_node *node = malloc(sizeof(circuit_node));
 
-    return NULL;
+    node->operation_code = VARIABLE_CODE;
+    node->right_son = NULL;
+    node->left_son = NULL;
+    sscanf(expression, "x[%d]", &node->value);
+
+    return node;
+}
+
+circuit_node *parse_value(const char *expression) {
+    circuit_node *node = malloc(sizeof(circuit_node));
+
+    node->operation_code = VALUE_CODE;
+    node->right_son = NULL;
+    node->left_son = NULL;
+    sscanf(expression, "%d", &node->value);
+
+    return node;
+}
+
+circuit_node *parse_unary_operation(const char *expression, size_t expression_length) {
+    circuit_node *node = malloc(sizeof(circuit_node));
+
+    char *new_expression = NULL;
+    node->operation_code = '-';
+    size_t new_expression_length = expression_length - 3;
+    new_expression = malloc(new_expression_length * sizeof(char)); // todo sizeof(char) == 1?
+    strncpy(new_expression, expression + 2, new_expression_length);
+    node->left_son = parse_expression(new_expression, new_expression_length);
+    return node;
 }
 
 int main() {
@@ -157,8 +150,9 @@ int main() {
     // todo remove delimiter from ending, decrease input length
 
     expression_length = (size_t) read;
+    expression[expression_length - 1] = 0;
 
-    circuit_node *circuit = parse_circuit(expression, expression_length);
+    circuit_node *circuit = parse_expression(expression, expression_length);
 
     // todo create dependency tree
 
