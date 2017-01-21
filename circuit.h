@@ -18,7 +18,6 @@
 #define BUFF_SIZE       64
 
 typedef struct enode enode;
-typedef struct cnode cnode;
 typedef struct dependency_dag_node dnode;
 typedef struct dependency_list dlist;
 typedef struct dependency_dag ddag;
@@ -31,15 +30,6 @@ struct enode {
     long value;
     enode *left_son; /// nodes that you are waiting for
     enode *right_son;
-    enode *parent; /// nodes to receive your value
-};
-
-struct cnode {
-    // todo pipe-in to receive signals
-    // todo pipe-out to output value
-
-    int variable_index;
-    unsigned int *dependent_variables;
 };
 
 struct dependency_dag_node {

@@ -14,7 +14,15 @@ void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string);
 int spawn_binary_node(enode *node, int var_pipes[][2], char *var_string);
 
 void process_single_input(unsigned int variables_count, const ddag *dependency_graph, const int *active_circuits,
-                         const long *variables_values, int equation_number);
+                          const long *variables_values, int equation_number);
+
+void release_memory(ddag *dependencies);
+
+void release_variable(dnode variable);
+
+void release_expression(enode *expression);
+
+void release_dependency_list(dlist *list_element);
 
 enode *parse_binary_operation(char *expression,
                               size_t expression_length,
@@ -66,6 +74,10 @@ enode *parse_binary_operation(char *expression,
 
     node->left_son = parse_expression(left_expression, left_expression_length, dependent_variables, variables_count);
     node->right_son = parse_expression(right_expression, right_expression_length, dependent_variables, variables_count);
+
+    // todo check
+    free(left_expression);
+    free(right_expression);
 
     return node;
 }
@@ -214,13 +226,12 @@ int main() {
                                                       &equation_number);
 
         if (is_solvable == 1) {
-
-            // todo this whole method has to be done in another process.
             switch (fork()) {
                 case -1:
                     syserr("Error in fork\n");
                 case 0:
-                    process_single_input(variables_count, dependency_graph, active_circuits, variables_values, equation_number);
+                    process_single_input(variables_count, dependency_graph, active_circuits, variables_values,
+                                         equation_number);
                     return 1;
                 default:
                     ++valid_inputs;
@@ -236,76 +247,89 @@ int main() {
         }
     }
 
-    // todo free allocated memory
+    release_memory(dependency_graph);
 
     return 0;
 }
 
+void release_memory(ddag *dependencies) {
+
+    for (int i = 0; i < dependencies->variables_count; ++i) {
+        release_variable(dependencies->variables[i]);
+    }
+
+    free(dependencies->variables);
+    free(dependencies);
+}
+
+void release_variable(dnode variable) {
+    release_expression(variable.expression);
+    release_dependency_list(variable.dependent_variables);
+}
+
+void release_dependency_list(dlist *list_element) {
+    dlist *next;
+
+    while (list_element != NULL) {
+        next = list_element->next;
+        free(list_element);
+        list_element = next;
+    }
+}
+
+void release_expression(enode *expression) {
+    if (expression != NULL) {
+        release_expression(expression->left_son);
+        release_expression(expression->right_son);
+        free(expression);
+    }
+}
+
 void process_single_input(unsigned int variables_count, const ddag *dependency_graph, const int *active_circuits,
-                         const long *variables_values, int equation_number) {
+                          const long *variables_values, int equation_number) {
     unsigned int childs_count = 0;
     int var_pipes[variables_count][2];
 
-//            int **var_pipes = malloc(sizeof(2*variables_count*sizeof(int)));
-
-//            int **var_pipes = calloc(0, variables_count * sizeof(int *));
-//
-//            for (int j = 0; j < variables_count; ++j) {
-//                var_pipes[j] = calloc(0, 2 * sizeof(int));
-//            }
-//
     for (int j = 0; j < variables_count; ++j) {
-                if (pipe(var_pipes[j]) == -1) {
-                    syserr("Error in pipe\n");
-                }
-            }
-
-//            for (int j = 0; j < variables_count; ++j) {
-//                printf("%d, ", variables_initialized[j]);
-//            }
-//            printf("\n");
-//            for (int j = 0; j < variables_count; ++j) {
-//                printf("%d, ", active_circuits[j]);
-//            }
-//            printf("\n");
-//            for (int j = 0; j < variables_count; ++j) {
-//                printf("%ld, ", variables_values[j]);
-//            }
+        if (pipe(var_pipes[j]) == -1) {
+            syserr("Error in pipe\n");
+        }
+    }
 
     for (int j = 0; j < variables_count; ++j) {
-                if (active_circuits[j] == LEAF) {
-                    put_val_into_pipe(j, variables_values, var_pipes);
-                } else if (active_circuits[j] == ACTIVE) {
-                    switch (fork()) {
-                        case -1:
-                            syserr("Error in fork\n");
-                        case 0:
-                            spawn_tree(j, dependency_graph->variables, var_pipes);
-                            return;
-                        default:
-                            ++childs_count;
-                    }
-                }
+        if (active_circuits[j] == LEAF) {
+            put_val_into_pipe(j, variables_values, var_pipes);
+        } else if (active_circuits[j] == ACTIVE) {
+            switch (fork()) {
+                case -1:
+                    syserr("Error in fork\n");
+                case 0:
+                    spawn_tree(j, dependency_graph->variables, var_pipes);
+                    return;
+                default:
+                    ++childs_count;
             }
+        }
+    }
 
     char result_string[BUFF_SIZE];
     if (read(var_pipes[0][0], result_string, BUFF_SIZE) == -1) {
-                syserr("Error while reading\n");
-            }
+        syserr("Error while reading\n");
+    }
 
 
     for (int p = 0; p < childs_count; ++p) {
         if (wait(0) == -1) {
-                    syserr("Error in wait\n");
+            syserr("Error in wait\n");
         }
     }
 
     for (int v = 0; v < variables_count; ++v) {
         if (close(var_pipes[v][0]) == -1) {
-                    syserr("Error while closing pipe\n");
+            syserr("Error while closing pipe\n");
         }
         if (close(var_pipes[v][1]) == -1) {
-                    syserr("Error while closing pipe\n");
+            syserr("Error while closing pipe\n");
         }
     }
 
@@ -369,8 +393,6 @@ void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]) {
         syserr("Error while closing pipe_up[0]\n");
     }
 
-//    printf("%d", node->operation_code);
-
     int ret_code = 1;
 
     if (node->operation_code == VALUE_CODE) {
@@ -384,7 +406,6 @@ void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]) {
     }
 
     if (ret_code == 1) {
-//    printf("Waiting for results main node\n");
         /// Writing results to pipe_up.
         if (write(pipe_up[1], var_value, BUFF_SIZE) == -1) {
             syserr("Error while writing %d\n", node->operation_code);
@@ -512,18 +533,14 @@ void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) 
 void spawn_variable_node(const enode *node, int var_pipes[][2], char *var_value) {
     long var_index = node->value;
 
-//    printf("Waiting for results variable %ld (%p)\n ", var_index, node);
     if (read(var_pipes[var_index][0], var_value, BUFF_SIZE) == -1) {
         syserr("Error while reading\n");
     }
 
-//    printf("%s\n", var_value);
-//    printf("Writing in variable\n");
     //todo do i have to write back value to buffer? (multiple access)
     if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
         syserr("Error while writing\n");
     }
-//    printf("%s\n", var_value);
 }
 
 int read_resolve_initialization(ddag *dependency_graph,
@@ -532,11 +549,14 @@ int read_resolve_initialization(ddag *dependency_graph,
                                 long *variables_values,
                                 int *equation_number) {
     char *expression = NULL;
+    char *to_release;
     size_t len = 0;
     size_t expression_length;
     ssize_t read;
 
     read = getline(&expression, &len, stdin);
+
+    to_release = expression;
 
     expression_length = (size_t) read;
     expression[expression_length - 1] = 0;
@@ -553,6 +573,10 @@ int read_resolve_initialization(ddag *dependency_graph,
         variables_values[var_index] = var_value;
         expression += chars_read;
     }
+
+
+    //todo check
+    free(to_release);
 
     return is_circuit_solvable(dependency_graph, variables_initialized, active_circuits);
 }
@@ -621,17 +645,22 @@ int dfs_cycle_search(int v, dnode *vertices, unsigned int vertices_visited[]) {
 
 void read_parse_equation(unsigned int variables_count, ddag *dependency_graph) {
     char *expression = NULL;
+    char *to_release;
     size_t len = 0;
     size_t expression_length;
     ssize_t read;
 
     read = getline(&expression, &len, stdin);
 
+    to_release = expression;
+
     expression_length = (size_t) read;
     expression[expression_length - 1] = 0;
 
-
     parse_single_equation(expression, expression_length, dependency_graph, variables_count);
+
+    //todo check
+    free(to_release);
 }
 
 ddag *initialize_dependency_graph(unsigned int variables_count) {
