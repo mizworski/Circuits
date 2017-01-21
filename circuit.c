@@ -5,6 +5,10 @@
 
 #include "circuit.h"
 
+void spawn_tree(int var_index, dnode *variables, int pipes[][2]);
+
+void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]);
+
 enode *parse_binary_operation(char *expression,
                               size_t expression_length,
                               unsigned int dependent_variables[],
@@ -66,7 +70,7 @@ enode *parse_variable(const char *expression,
     node->operation_code = VARIABLE_CODE;
     node->right_son = NULL;
     node->left_son = NULL;
-    sscanf(expression, "x[%d]", &node->value);
+    sscanf(expression, "x[%ld]", &node->value);
 
     dependent_variables[node->value] = 1;
 
@@ -79,7 +83,7 @@ enode *parse_value(const char *expression) {
     node->operation_code = VALUE_CODE;
     node->right_son = NULL;
     node->left_son = NULL;
-    sscanf(expression, "%d", &node->value);
+    sscanf(expression, "%ld", &node->value);
 
     return node;
 }
@@ -165,18 +169,6 @@ int main() {
 
     // todo initialize pipes for variables
     // todo for now all variables pipes are visible to others, can be reduced to initialize them traversing dependency tree
-    int vars_in[variables_count][2];
-    int vars_out[variables_count][2];
-
-    for (int i = 0; i < variables_count; ++i) {
-        if (pipe(vars_in[i]) == -1) {
-            syserr("Error in pipe\n");
-        }
-
-        if (pipe(vars_out[i]) == -1) {
-            syserr("Error in pipe\n");
-        }
-    }
 
     ddag *dependency_graph = initialize_dependency_graph(variables_count);
 
@@ -209,7 +201,7 @@ int main() {
     for (int i = 0; i < initial_values_to_process; ++i) {
         int variables_initialized[variables_count];
         int active_circuits[variables_count];
-        int variables_values[variables_count];
+        long variables_values[variables_count];
 
         memset(variables_initialized, 0, sizeof(variables_initialized));
         memset(active_circuits, 0, sizeof(active_circuits));
@@ -224,6 +216,24 @@ int main() {
 
         if (is_solvable == 1) {
             fprintf(stdout, "%d P\n", equation_number);
+
+            // todo this whole method has to be done in another process.
+
+            int var_pipes[variables_count][2];
+
+            for (int j = 0; j < variables_count; ++j) {
+                if (pipe(var_pipes[j]) == -1) {
+                    syserr("Error in pipe\n");
+                }
+            }
+
+            for (int j = 0; j < variables_count; ++j) {
+                if (active_circuits[j] == LEAF) {
+                    put_val_into_pipe(j, variables_values, var_pipes);
+                } else if (active_circuits[j] == ACTIVE) {
+                    spawn_tree(i, dependency_graph->variables, var_pipes);
+                }
+            }
         } else {
             fprintf(stdout, "%d F\n", equation_number);
         }
@@ -244,10 +254,24 @@ int main() {
     return 0;
 }
 
+void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]) {
+    char *var_value[BUFF_SIZE];
+    memset(var_value, 0, sizeof(var_value));
+    memcpy(var_value, (char *) &variables_values[var_index], sizeof(long));
+
+    if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
+                        syserr("Error while writing\n");
+                    }
+}
+
+void spawn_tree(int var_index, dnode *variables, int pipes[][2]) {
+
+}
+
 int read_resolve_initialization(ddag *dependency_graph,
                                 int *variables_initialized,
                                 int *active_circuits,
-                                int *variables_values,
+                                long *variables_values,
                                 int *equation_number) {
     char *expression = NULL;
     size_t len = 0;
@@ -265,13 +289,12 @@ int read_resolve_initialization(ddag *dependency_graph,
     expression += chars_read;
 
     unsigned int var_index;
-    int var_value;
-    while (sscanf(expression, "x[%d] %d %n", &var_index, &var_value, &chars_read) == 2) {
+    long var_value;
+    while (sscanf(expression, "x[%d] %ld %n", &var_index, &var_value, &chars_read) == 2) {
         variables_initialized[var_index] = 1;
         variables_values[var_index] = var_value;
         expression += chars_read;
     }
-
 
     return is_circuit_solvable(dependency_graph, variables_initialized, active_circuits);
 }

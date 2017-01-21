@@ -13,7 +13,6 @@ int main ()
     pid_t pid;
     char buf[BUF_SIZE];
 
-    /*
     for (int i = 1; i <= NR_PROC; i++) {
 
         int fd[2];
@@ -58,10 +57,11 @@ int main ()
                 return 0;
         }
     }
-    */
+    /*
     int val;
     char *exp = "x[3]";
     sscanf(exp, "x[%d]", &val);
     printf("%d", val);
+     */
     return 0;
 }

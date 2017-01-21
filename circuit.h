@@ -10,11 +10,12 @@
 #include "circuit.h"
 #include "err.h"
 
-#define VARIABLE_CODE 2137
-#define VALUE_CODE 1488
+#define VARIABLE_CODE   2137
+#define VALUE_CODE      1488
 
-#define ACTIVE      1
-#define LEAF        10
+#define ACTIVE          1
+#define LEAF            10
+#define BUFF_SIZE       64
 
 typedef struct enode enode;
 typedef struct cnode cnode;
@@ -27,7 +28,7 @@ struct enode {
     // todo pipe-out
 
     int operation_code;
-    int value;
+    long value;
     enode *left_son; /// nodes that you are waiting for
     enode *right_son;
     enode *parent; /// nodes to receive your value
@@ -96,7 +97,7 @@ int dfs_is_solvable(dnode *v, dnode *variables, int *variables_initialized, int 
 int read_resolve_initialization(ddag *dependency_graph,
                                 int *variables_initialized,
                                 int *active_circuits,
-                                int *variables_values,
+                                long *variables_values,
                                 int *equation_number);
 
 #endif //PWZADANIE3_CIRCUIT_H
