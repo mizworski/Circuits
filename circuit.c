@@ -7,6 +7,8 @@
 
 int is_circuit_solvable(ddag *dependency_graph, int *variables_initialized);
 
+int dfs_is_solvabe(dnode *v, dnode variables[], int *variables_initialized);
+
 enode *parse_binary_operation(char *expression,
                               size_t expression_length,
                               unsigned int dependent_variables[],
@@ -237,7 +239,7 @@ int main() {
         }
 
         if (is_circuit_solvable(dependency_graph, variables_initialized) == 1) {
-
+            fprintf(stdout, "%d P\n", equation_number);
         } else {
             fprintf(stdout, "%d F\n", equation_number);
         }
@@ -260,6 +262,28 @@ int main() {
 
 int is_circuit_solvable(ddag *dependency_graph, int *variables_initialized) {
     dnode *root = dependency_graph->variables;
+
+    return dfs_is_solvabe(root, dependency_graph->variables, variables_initialized);
+}
+
+int dfs_is_solvabe(dnode *v, dnode variables[], int *variables_initialized) {
+    int variable_index = v->variable_index;
+
+    if (variables_initialized[variable_index] == 1) {
+        return 1;
+    }
+
+    if (variables[variable_index].expression == NULL) {
+        return 0;
+    }
+
+    for (dlist *var = variables[variable_index].dependent_variables; var != NULL; var = var->next) {
+        if (dfs_is_solvabe(var->variable, variables, variables_initialized) == 0) {
+            return 0;
+        }
+    }
+
+    return 1;
 }
 
 int is_cycled(ddag *dependency_graph) {
