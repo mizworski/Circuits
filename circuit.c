@@ -215,7 +215,6 @@ int main() {
                                                       &equation_number);
 
         if (is_solvable == 1) {
-            fprintf(stdout, "%d P\n", equation_number);
 
             // todo this whole method has to be done in another process.
 
@@ -234,6 +233,15 @@ int main() {
                     spawn_tree(i, dependency_graph->variables, var_pipes);
                 }
             }
+
+            char result_string[BUFF_SIZE];
+            if (read(var_pipes[0][0], result_string, BUFF_SIZE) == -1) {
+                syserr("Error while reading\n");
+            }
+
+            long result_val;// = atoi(result_string);
+            sscanf(result_string, "%ld", &result_val);
+            fprintf(stdout, "%d P %ld\n", equation_number, result_val);
         } else {
             fprintf(stdout, "%d F\n", equation_number);
         }
@@ -255,13 +263,13 @@ int main() {
 }
 
 void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]) {
-    char *var_value[BUFF_SIZE];
-    memset(var_value, 0, sizeof(var_value));
-    memcpy(var_value, (char *) &variables_values[var_index], sizeof(long));
+    char var_value[BUFF_SIZE];
+//    memset(var_value, 0, sizeof(var_value));
+    sprintf(var_value,"%ld", variables_values[var_index]);
 
     if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
-                        syserr("Error while writing\n");
-                    }
+        syserr("Error while writing\n");
+    }
 }
 
 void spawn_tree(int var_index, dnode *variables, int pipes[][2]) {
