@@ -73,7 +73,17 @@ enode *parse_expression(char *expression,
                         unsigned int dependent_variables[],
                         unsigned int variables_count);
 
-void
-parse_single_equation(char *expression, size_t expression_length, ddag *variables, unsigned int variables_count);
+void parse_single_equation(char *expression, size_t expression_length, ddag *variables, unsigned int variables_count);
+
+
+void set_variables(unsigned int variables_count, dnode *variables);
+
+ddag *initialize_dependency_graph(unsigned int count);
+
+void read_parse_equation(unsigned int variables_count, ddag *dependency_graph);
+
+int is_cycled(ddag *dependency_graph);
+
+int dfs_cycle_search(int v, dnode *vertices, unsigned int vertices_visited[]);
 
 #endif //PWZADANIE3_CIRCUIT_H

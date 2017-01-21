@@ -5,24 +5,10 @@
 
 #include "circuit.h"
 
-int variables_in[2137];
-int variables_out[2137];
-
-void set_variables(unsigned int variables_count, dnode *variables);
-
-ddag *initialize_dependency_graph(unsigned int count);
-
-void read_parse_equation(unsigned int variables_count, ddag *dependency_graph);
-
-int is_cycled(ddag *dependency_graph);
-
-int dfs_cycle_search(int v, dnode *vertices, unsigned int vertices_visited[]);
-
-enode *
-parse_binary_operation(char *expression,
-                       size_t expression_length,
-                       unsigned int dependent_variables[],
-                       unsigned int variables_count) {
+enode *parse_binary_operation(char *expression,
+                              size_t expression_length,
+                              unsigned int dependent_variables[],
+                              unsigned int variables_count) {
     enode *node = malloc(sizeof(enode));
 
     char *current_char = expression;
@@ -168,11 +154,14 @@ void parse_single_equation(char *expression, size_t expression_length, ddag *dgr
 
 int main() {
     // todo read input
-    unsigned int input_length = 10;
-    unsigned int circuit_equations_number = 2;
-    unsigned int variables_count = 10;
+    unsigned int rows_number;
+    unsigned int circuit_equations_number;
+    unsigned int variables_count;
+    unsigned int initial_values_to_process;
 
-    // PRE-PROCESSING
+    scanf("%d %d %d\n", &rows_number, &circuit_equations_number, &variables_count);
+
+    initial_values_to_process = rows_number - circuit_equations_number;
 
     // todo initialize pipes for variables
     // todo for now all variables pipes are visible to others, can be reduced to initialize them traversing dependency tree
@@ -192,20 +181,55 @@ int main() {
     ddag *dependency_graph = initialize_dependency_graph(variables_count);
 
     for (int i = 0; i < circuit_equations_number; ++i) {
+        unsigned int equation_number;
+        scanf("%d ", &equation_number);
+
         read_parse_equation(variables_count, dependency_graph);
 
         if (is_cycled(dependency_graph) == 1) {
+            fprintf(stdout, "%d F", equation_number);
             return 42;
         }
+        fprintf(stdout, "%d P\n", equation_number);
     }
-
-    printf("Czy zacyklony %d\n", is_cycled(dependency_graph));
 
     // todo initialize processes from structure (create net)
 
     // REQUESTS
 
+    fflush(stdout);
+
     // in loop
+
+    for (int i = 0; i < initial_values_to_process; ++i) {
+        int equation_number;
+        scanf("%d ", &equation_number);
+
+        int variables_initialized[variables_count];
+        memset(variables_initialized, 0, sizeof(variables_initialized));
+
+        int variables_values[variables_count];
+
+        char *expression = NULL;
+        size_t len = 0;
+        size_t expression_length;
+        ssize_t read;
+
+        read = getline(&expression, &len, stdin);
+
+        expression_length = (size_t) read;
+        expression[expression_length - 1] = 0;
+
+        unsigned int var_index;
+        int var_value;
+        unsigned int chars_read;
+        while (sscanf(expression, "x[%d] %d %n", &var_index, &var_value, &chars_read) == 2) {
+            variables_initialized[var_index] = 1;
+            variables_values[var_index] = var_value;
+            expression += chars_read;
+        }
+
+    }
 
     // todo resolve dependencies, decide if circuit is resolvable and to which nodes send values
 
@@ -264,6 +288,7 @@ void read_parse_equation(unsigned int variables_count, ddag *dependency_graph) {
 
     expression_length = (size_t) read;
     expression[expression_length - 1] = 0;
+
 
     parse_single_equation(expression, expression_length, dependency_graph, variables_count);
 }
