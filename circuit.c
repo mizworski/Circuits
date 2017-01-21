@@ -212,13 +212,34 @@ int main() {
 
             // todo this whole method has to be done in another process.
 
+            unsigned int childs_count = 0;
             int var_pipes[variables_count][2];
 
+//            int **var_pipes = malloc(sizeof(2*variables_count*sizeof(int)));
+
+//            int **var_pipes = calloc(0, variables_count * sizeof(int *));
+//
+//            for (int j = 0; j < variables_count; ++j) {
+//                var_pipes[j] = calloc(0, 2 * sizeof(int));
+//            }
+//
             for (int j = 0; j < variables_count; ++j) {
                 if (pipe(var_pipes[j]) == -1) {
                     syserr("Error in pipe\n");
                 }
             }
+
+//            for (int j = 0; j < variables_count; ++j) {
+//                printf("%d, ", variables_initialized[j]);
+//            }
+//            printf("\n");
+//            for (int j = 0; j < variables_count; ++j) {
+//                printf("%d, ", active_circuits[j]);
+//            }
+//            printf("\n");
+//            for (int j = 0; j < variables_count; ++j) {
+//                printf("%ld, ", variables_values[j]);
+//            }
 
             for (int j = 0; j < variables_count; ++j) {
                 if (active_circuits[j] == LEAF) {
@@ -228,10 +249,11 @@ int main() {
                         case -1:
                             syserr("Error in fork\n");
                         case 0:
-                            spawn_tree(i, dependency_graph->variables, var_pipes);
+//                            printf("Spawned (%p)\n", dependency_graph->variables);
+                            spawn_tree(j, dependency_graph->variables, var_pipes);
                             return 1;
                         default:
-                            continue;
+                            ++childs_count;
                     }
                 }
             }
@@ -241,15 +263,27 @@ int main() {
                 syserr("Error while reading\n");
             }
 
-            long result_val;// = atoi(result_string);
+            for (int p = 0; p < childs_count; ++p) {
+                if (wait(0) == -1)
+                    syserr("Error in wait\n");
+            }
+
+            for (int v = 0; v < variables_count; ++v) {
+                if (close(var_pipes[v][0]) == -1) {
+                    syserr("Error while closing pipe\n");
+                }
+                if (close(var_pipes[v][1]) == -1) {
+                    syserr("Error while closing pipe\n");
+                }
+            }
+
+            long result_val;
             sscanf(result_string, "%ld", &result_val);
             fprintf(stdout, "%d P %ld\n", equation_number, result_val);
         } else {
             fprintf(stdout, "%d F\n", equation_number);
         }
     }
-
-    // CLEANING STAGE
 
     // todo free allocated memory
 
@@ -278,7 +312,10 @@ void spawn_tree(int var_index, dnode *variables, int var_pipes[][2]) {
         case -1:
             syserr("Error in fork\n");
         case 0:
+//            printf("Spawned main node\n");
+//            printf("Spawned main node (%d), (%p)\n", var_index, root);
             spawn_circuit_node(root, pipe_down, var_pipes);
+            return;
         default:
             if (close(pipe_down[1]) == -1) {
                 syserr("Error while closing pipe_down[1]\n");
@@ -295,6 +332,9 @@ void spawn_tree(int var_index, dnode *variables, int var_pipes[][2]) {
             if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
                 syserr("Error while writing\n");
             }
+
+            if (wait(0) == -1)
+                syserr("Error in wait\n");
     }
 }
 
@@ -317,9 +357,10 @@ void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]) {
         spawn_binary_node(node, var_pipes, var_value);
     }
 
+//    printf("Waiting for results main node\n");
     /// Writing results to pipe_up.
     if (write(pipe_up[1], var_value, BUFF_SIZE) == -1) {
-        syserr("Error while writing\n");
+        syserr("Error while writing ddd\n");
     }
 
     if (close(pipe_up[1]) == -1) {
@@ -336,9 +377,23 @@ void spawn_binary_node(enode *node, int var_pipes[][2], char *var_string) {
     if (pipe(pipe_down_right) == -1) {
         syserr("Error in pipe\n");
     }
+    switch (fork()) {
+        case -1:
+            syserr("Error in fork\n");
+        case 0:
+            spawn_circuit_node(node->left_son, pipe_down_left, var_pipes);
+            return;
+        default:;
+    }
 
-    spawn_circuit_node(node->left_son, pipe_down_left, var_pipes);
-    spawn_circuit_node(node->right_son, pipe_down_right, var_pipes);
+    switch (fork()) {
+        case -1:
+            syserr("Error in fork\n");
+        case 0:
+            spawn_circuit_node(node->right_son, pipe_down_right, var_pipes);
+            return;
+        default:;
+    }
 
     if (close(pipe_down_left[1]) == -1) {
         syserr("Error while closing pipe_down[1]\n");
@@ -379,6 +434,12 @@ void spawn_binary_node(enode *node, int var_pipes[][2], char *var_string) {
     }
 
     sprintf(var_string, "%ld", res_val);
+
+    if (wait(0) == -1)
+        syserr("Error in wait\n");
+
+    if (wait(0) == -1)
+        syserr("Error in wait\n");
 }
 
 void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) {
@@ -387,39 +448,53 @@ void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) 
         syserr("Error in pipe\n");
     }
 
-    spawn_circuit_node(node->left_son, pipe_down, var_pipes);
+    switch (fork()) {
+        case -1:
+            syserr("Error in fork\n");
+        case 0:
+            spawn_circuit_node(node->left_son, pipe_down, var_pipes);
+            return;
+        default:
+            if (close(pipe_down[1]) == -1) {
+                syserr("Error while closing pipe_down[1]\n");
+            }
 
-    if (close(pipe_down[1]) == -1) {
-        syserr("Error while closing pipe_down[1]\n");
+            if (read(pipe_down[0], var_string, BUFF_SIZE) == -1) {
+                syserr("Error while reading\n");
+            }
+
+            if (close(pipe_down[0]) == -1) {
+                syserr("Error while closing pipe_down[0]\n");
+            }
+
+            long var_value;// = atoi(result_string);
+            sscanf(var_string, "%ld", &var_value);
+
+            var_value *= -1;
+
+            sprintf(var_string, "%ld", var_value);
+
+            if (wait(0) == -1) {
+                syserr("Error in wait\n");
+            }
     }
-
-    if (read(pipe_down[0], var_string, BUFF_SIZE) == -1) {
-        syserr("Error while reading\n");
-    }
-
-    if (close(pipe_down[0]) == -1) {
-        syserr("Error while closing pipe_down[0]\n");
-    }
-
-    long var_value;// = atoi(result_string);
-    sscanf(var_string, "%ld", &var_value);
-
-    var_value *= -1;
-
-    sprintf(var_string, "%ld", var_value);
 }
 
 void spawn_variable_node(const enode *node, int var_pipes[][2], char *var_value) {
     long var_index = node->value;
 
+//    printf("Waiting for results variable %ld (%p)\n ", var_index, node);
     if (read(var_pipes[var_index][0], var_value, BUFF_SIZE) == -1) {
         syserr("Error while reading\n");
     }
 
+//    printf("%s\n", var_value);
+//    printf("Writing in variable\n");
     //todo do i have to write back value to buffer? (multiple access)
     if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
         syserr("Error while writing\n");
     }
+//    printf("%s\n", var_value);
 }
 
 int read_resolve_initialization(ddag *dependency_graph,
