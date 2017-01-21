@@ -211,9 +211,6 @@ int main() {
     // in loop
 
     for (int i = 0; i < initial_values_to_process; ++i) {
-        int equation_number;
-        scanf("%d ", &equation_number);
-
         int variables_initialized[variables_count];
         memset(variables_initialized, 0, sizeof(variables_initialized));
 
@@ -229,9 +226,14 @@ int main() {
         expression_length = (size_t) read;
         expression[expression_length - 1] = 0;
 
+        int equation_number;
+        unsigned int chars_read;
+        sscanf(expression, "%d %n", &equation_number, &chars_read);
+
+        expression += chars_read;
+
         unsigned int var_index;
         int var_value;
-        unsigned int chars_read;
         while (sscanf(expression, "x[%d] %d %n", &var_index, &var_value, &chars_read) == 2) {
             variables_initialized[var_index] = 1;
             variables_values[var_index] = var_value;
