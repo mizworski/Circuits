@@ -5,6 +5,8 @@
 
 #include "circuit.h"
 
+int is_circuit_solvable(ddag *dependency_graph, int *variables_initialized);
+
 enode *parse_binary_operation(char *expression,
                               size_t expression_length,
                               unsigned int dependent_variables[],
@@ -199,6 +201,11 @@ int main() {
 
     fflush(stdout);
 
+    if (dependency_graph->variables[0].expression == NULL) {
+        fprintf(stdout, "%d F", circuit_equations_number + 1);
+        return 42;
+    }
+
     // in loop
 
     for (int i = 0; i < initial_values_to_process; ++i) {
@@ -229,6 +236,11 @@ int main() {
             expression += chars_read;
         }
 
+        if (is_circuit_solvable(dependency_graph, variables_initialized) == 1) {
+
+        } else {
+            fprintf(stdout, "%d F\n", equation_number);
+        }
     }
 
     // todo resolve dependencies, decide if circuit is resolvable and to which nodes send values
@@ -244,6 +256,10 @@ int main() {
     // todo free allocated memory
 
     return 0;
+}
+
+int is_circuit_solvable(ddag *dependency_graph, int *variables_initialized) {
+    dnode *root = dependency_graph->variables;
 }
 
 int is_cycled(ddag *dependency_graph) {
@@ -274,6 +290,8 @@ int dfs_cycle_search(int v, dnode *vertices, unsigned int vertices_visited[]) {
             return 1;
         }
     }
+
+    vertices_visited[v] = 0;
 
     return 0;
 }
