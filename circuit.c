@@ -13,6 +13,9 @@ void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string);
 
 int spawn_binary_node(enode *node, int var_pipes[][2], char *var_string);
 
+void process_single_input(unsigned int variables_count, const ddag *dependency_graph, const int *active_circuits,
+                         const long *variables_values, int equation_number);
+
 enode *parse_binary_operation(char *expression,
                               size_t expression_length,
                               unsigned int dependent_variables[],
@@ -192,6 +195,8 @@ int main() {
         return 42;
     }
 
+    unsigned int valid_inputs = 0;
+
     for (int i = 0; i < initial_values_to_process; ++i) {
         int variables_initialized[variables_count];
         int active_circuits[variables_count];
@@ -211,9 +216,35 @@ int main() {
         if (is_solvable == 1) {
 
             // todo this whole method has to be done in another process.
+            switch (fork()) {
+                case -1:
+                    syserr("Error in fork\n");
+                case 0:
+                    process_single_input(variables_count, dependency_graph, active_circuits, variables_values, equation_number);
+                    return 1;
+                default:
+                    ++valid_inputs;
+            }
+        } else {
+            fprintf(stdout, "%d F\n", equation_number);
+        }
+    }
 
-            unsigned int childs_count = 0;
-            int var_pipes[variables_count][2];
+    for (int i = 0; i < valid_inputs; ++i) {
+        if (wait(0) == -1) {
+            syserr("Error in wait\n");
+        }
+    }
+
+    // todo free allocated memory
+
+    return 0;
+}
+
+void process_single_input(unsigned int variables_count, const ddag *dependency_graph, const int *active_circuits,
+                         const long *variables_values, int equation_number) {
+    unsigned int childs_count = 0;
+    int var_pipes[variables_count][2];
 
 //            int **var_pipes = malloc(sizeof(2*variables_count*sizeof(int)));
 
@@ -223,7 +254,7 @@ int main() {
 //                var_pipes[j] = calloc(0, 2 * sizeof(int));
 //            }
 //
-            for (int j = 0; j < variables_count; ++j) {
+    for (int j = 0; j < variables_count; ++j) {
                 if (pipe(var_pipes[j]) == -1) {
                     syserr("Error in pipe\n");
                 }
@@ -241,7 +272,7 @@ int main() {
 //                printf("%ld, ", variables_values[j]);
 //            }
 
-            for (int j = 0; j < variables_count; ++j) {
+    for (int j = 0; j < variables_count; ++j) {
                 if (active_circuits[j] == LEAF) {
                     put_val_into_pipe(j, variables_values, var_pipes);
                 } else if (active_circuits[j] == ACTIVE) {
@@ -249,45 +280,38 @@ int main() {
                         case -1:
                             syserr("Error in fork\n");
                         case 0:
-//                            printf("Spawned (%p)\n", dependency_graph->variables);
                             spawn_tree(j, dependency_graph->variables, var_pipes);
-                            return 1;
+                            return;
                         default:
                             ++childs_count;
                     }
                 }
             }
 
-            char result_string[BUFF_SIZE];
-            if (read(var_pipes[0][0], result_string, BUFF_SIZE) == -1) {
+    char result_string[BUFF_SIZE];
+    if (read(var_pipes[0][0], result_string, BUFF_SIZE) == -1) {
                 syserr("Error while reading\n");
             }
 
-            for (int p = 0; p < childs_count; ++p) {
-                if (wait(0) == -1)
+
+    for (int p = 0; p < childs_count; ++p) {
+        if (wait(0) == -1) {
                     syserr("Error in wait\n");
-            }
-
-            for (int v = 0; v < variables_count; ++v) {
-                if (close(var_pipes[v][0]) == -1) {
-                    syserr("Error while closing pipe\n");
-                }
-                if (close(var_pipes[v][1]) == -1) {
-                    syserr("Error while closing pipe\n");
-                }
-            }
-
-            long result_val;
-            sscanf(result_string, "%ld", &result_val);
-            fprintf(stdout, "%d P %ld\n", equation_number, result_val);
-        } else {
-            fprintf(stdout, "%d F\n", equation_number);
         }
     }
 
-    // todo free allocated memory
+    for (int v = 0; v < variables_count; ++v) {
+        if (close(var_pipes[v][0]) == -1) {
+                    syserr("Error while closing pipe\n");
+        }
+        if (close(var_pipes[v][1]) == -1) {
+                    syserr("Error while closing pipe\n");
+        }
+    }
 
-    return 0;
+    long result_val;
+    sscanf(result_string, "%ld", &result_val);
+    fprintf(stdout, "%d P %ld\n", equation_number, result_val);
 }
 
 void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]) {
