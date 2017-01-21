@@ -23,9 +23,6 @@ typedef struct dependency_list dlist;
 typedef struct dependency_dag ddag;
 
 struct enode {
-    // todo pipe-in
-    // todo pipe-out
-
     int operation_code;
     long value;
     enode *left_son; /// nodes that you are waiting for
@@ -98,7 +95,7 @@ void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]);
 
 void spawn_variable_node(const enode *node, int var_pipes[][2], char *var_value);
 
-void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string);
+int spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string);
 
 int spawn_binary_node(enode *node, int var_pipes[][2], char *var_string);
 

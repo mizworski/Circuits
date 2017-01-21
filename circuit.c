@@ -302,7 +302,7 @@ void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]) {
     } else if (node->operation_code == VARIABLE_CODE) {
         spawn_variable_node(node, var_pipes, var_value);
     } else if (node->operation_code == '-') {
-        spawn_negate_node(node, var_pipes, var_value);
+        ret_code = spawn_negate_node(node, var_pipes, var_value);
     } else if (node->operation_code == '*' || node->operation_code == '+') {
         ret_code = spawn_binary_node(node, var_pipes, var_value);
     }
@@ -394,7 +394,7 @@ int spawn_binary_node(enode *node, int var_pipes[][2], char *var_string) {
     return 1;
 }
 
-void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) {
+int spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) {
     int pipe_down[2];
     if (pipe(pipe_down) == -1) {
         syserr("Error in pipe\n");
@@ -405,7 +405,7 @@ void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) 
             syserr("Error in fork\n");
         case 0:
             spawn_circuit_node(node->left_son, pipe_down, var_pipes);
-            return;
+            return 0;
         default:
             if (close(pipe_down[1]) == -1) {
                 syserr("Error while closing pipe_down[1]\n");
@@ -430,6 +430,8 @@ void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) 
                 syserr("Error in wait\n");
             }
     }
+
+    return 1;
 }
 
 void spawn_variable_node(const enode *node, int var_pipes[][2], char *var_value) {
