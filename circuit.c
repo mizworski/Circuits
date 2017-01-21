@@ -167,9 +167,6 @@ int main() {
 
     initial_values_to_process = rows_number - circuit_equations_number;
 
-    // todo initialize pipes for variables
-    // todo for now all variables pipes are visible to others, can be reduced to initialize them traversing dependency tree
-
     ddag *dependency_graph = initialize_dependency_graph(variables_count);
 
     for (int i = 0; i < circuit_equations_number; ++i) {
@@ -185,18 +182,12 @@ int main() {
         fprintf(stdout, "%d P\n", equation_number);
     }
 
-    // todo initialize processes from structure (create net)
-
-    // REQUESTS
-
     fflush(stdout);
 
     if (dependency_graph->variables[0].expression == NULL) {
         fprintf(stdout, "%d F", circuit_equations_number + 1);
         return 42;
     }
-
-    // in loop
 
     for (int i = 0; i < initial_values_to_process; ++i) {
         int variables_initialized[variables_count];
@@ -247,15 +238,7 @@ int main() {
         }
     }
 
-    // todo resolve dependencies, decide if circuit is resolvable and to which nodes send values
-
-    // todo send values
-
-    // todo print result
-
     // CLEANING STAGE
-
-    // todo terminate all processes
 
     // todo free allocated memory
 
@@ -264,7 +247,6 @@ int main() {
 
 void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]) {
     char var_value[BUFF_SIZE];
-//    memset(var_value, 0, sizeof(var_value));
     sprintf(var_value,"%ld", variables_values[var_index]);
 
     if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
