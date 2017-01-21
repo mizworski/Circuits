@@ -465,14 +465,14 @@ int read_resolve_initialization(ddag *dependency_graph,
     expression_length = (size_t) read;
     expression[expression_length - 1] = 0;
 
-    unsigned int chars_read;
+    int chars_read;
     sscanf(expression, "%d %n", equation_number, &chars_read);
 
     expression += chars_read;
 
     unsigned int var_index;
     long var_value;
-    while (sscanf(expression, "x[%d] %ld %n", &var_index, &var_value, &chars_read) == 2) {
+    while (sscanf(expression, "x[%u] %ld %n", &var_index, &var_value, &chars_read) == 2) {
         variables_initialized[var_index] = 1;
         variables_values[var_index] = var_value;
         expression += chars_read;
@@ -587,7 +587,7 @@ int main() {
     unsigned int variables_count;
     unsigned int initial_values_to_process;
 
-    scanf("%d %d %d\n", &rows_number, &circuit_equations_number, &variables_count);
+    scanf("%u %u %u\n", &rows_number, &circuit_equations_number, &variables_count);
 
     initial_values_to_process = rows_number - circuit_equations_number;
 
@@ -595,7 +595,7 @@ int main() {
 
     for (int i = 0; i < circuit_equations_number; ++i) {
         unsigned int equation_number;
-        scanf("%d ", &equation_number);
+        scanf("%u ", &equation_number);
 
         read_parse_equation(variables_count, dependency_graph);
 
