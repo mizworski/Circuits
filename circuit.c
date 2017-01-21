@@ -5,10 +5,6 @@
 
 #include "circuit.h"
 
-int is_circuit_solvable(ddag *dependency_graph, int *variables_initialized);
-
-int dfs_is_solvabe(dnode *v, dnode variables[], int *variables_initialized);
-
 enode *parse_binary_operation(char *expression,
                               size_t expression_length,
                               unsigned int dependent_variables[],
@@ -212,35 +208,21 @@ int main() {
 
     for (int i = 0; i < initial_values_to_process; ++i) {
         int variables_initialized[variables_count];
-        memset(variables_initialized, 0, sizeof(variables_initialized));
-
+        int active_circuits[variables_count];
         int variables_values[variables_count];
 
-        char *expression = NULL;
-        size_t len = 0;
-        size_t expression_length;
-        ssize_t read;
-
-        read = getline(&expression, &len, stdin);
-
-        expression_length = (size_t) read;
-        expression[expression_length - 1] = 0;
+        memset(variables_initialized, 0, sizeof(variables_initialized));
+        memset(active_circuits, 0, sizeof(active_circuits));
+        memset(variables_values, 0, sizeof(variables_values));
 
         int equation_number;
-        unsigned int chars_read;
-        sscanf(expression, "%d %n", &equation_number, &chars_read);
+        int is_solvable = read_resolve_initialization(dependency_graph,
+                                                      variables_initialized,
+                                                      active_circuits,
+                                                      variables_values,
+                                                      &equation_number);
 
-        expression += chars_read;
-
-        unsigned int var_index;
-        int var_value;
-        while (sscanf(expression, "x[%d] %d %n", &var_index, &var_value, &chars_read) == 2) {
-            variables_initialized[var_index] = 1;
-            variables_values[var_index] = var_value;
-            expression += chars_read;
-        }
-
-        if (is_circuit_solvable(dependency_graph, variables_initialized) == 1) {
+        if (is_solvable == 1) {
             fprintf(stdout, "%d P\n", equation_number);
         } else {
             fprintf(stdout, "%d F\n", equation_number);
@@ -262,16 +244,49 @@ int main() {
     return 0;
 }
 
-int is_circuit_solvable(ddag *dependency_graph, int *variables_initialized) {
-    dnode *root = dependency_graph->variables;
+int read_resolve_initialization(ddag *dependency_graph,
+                                int *variables_initialized,
+                                int *active_circuits,
+                                int *variables_values,
+                                int *equation_number) {
+    char *expression = NULL;
+    size_t len = 0;
+    size_t expression_length;
+    ssize_t read;
 
-    return dfs_is_solvabe(root, dependency_graph->variables, variables_initialized);
+    read = getline(&expression, &len, stdin);
+
+    expression_length = (size_t) read;
+    expression[expression_length - 1] = 0;
+
+    unsigned int chars_read;
+    sscanf(expression, "%d %n", equation_number, &chars_read);
+
+    expression += chars_read;
+
+    unsigned int var_index;
+    int var_value;
+    while (sscanf(expression, "x[%d] %d %n", &var_index, &var_value, &chars_read) == 2) {
+        variables_initialized[var_index] = 1;
+        variables_values[var_index] = var_value;
+        expression += chars_read;
+    }
+
+
+    return is_circuit_solvable(dependency_graph, variables_initialized, active_circuits);
 }
 
-int dfs_is_solvabe(dnode *v, dnode variables[], int *variables_initialized) {
+int is_circuit_solvable(ddag *dependency_graph, int variables_initialized[], int active_variables[]) {
+    dnode *root = dependency_graph->variables;
+
+    return dfs_is_solvable(root, dependency_graph->variables, variables_initialized, active_variables);
+}
+
+int dfs_is_solvable(dnode *v, dnode *variables, int *variables_initialized, int *active_variables) {
     int variable_index = v->variable_index;
 
     if (variables_initialized[variable_index] == 1) {
+        active_variables[variable_index] = LEAF;
         return 1;
     }
 
@@ -280,11 +295,12 @@ int dfs_is_solvabe(dnode *v, dnode variables[], int *variables_initialized) {
     }
 
     for (dlist *var = variables[variable_index].dependent_variables; var != NULL; var = var->next) {
-        if (dfs_is_solvabe(var->variable, variables, variables_initialized) == 0) {
+        if (dfs_is_solvable(var->variable, variables, variables_initialized, active_variables) == 0) {
             return 0;
         }
     }
 
+    active_variables[variable_index] = ACTIVE;
     return 1;
 }
 

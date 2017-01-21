@@ -13,6 +13,9 @@
 #define VARIABLE_CODE 2137
 #define VALUE_CODE 1488
 
+#define ACTIVE      1
+#define LEAF        10
+
 typedef struct enode enode;
 typedef struct cnode cnode;
 typedef struct dependency_dag_node dnode;
@@ -85,5 +88,15 @@ void read_parse_equation(unsigned int variables_count, ddag *dependency_graph);
 int is_cycled(ddag *dependency_graph);
 
 int dfs_cycle_search(int v, dnode *vertices, unsigned int vertices_visited[]);
+
+int is_circuit_solvable(ddag *dependency_graph, int variables_initialized[], int active_variables[]);
+
+int dfs_is_solvable(dnode *v, dnode *variables, int *variables_initialized, int *active_variables);
+
+int read_resolve_initialization(ddag *dependency_graph,
+                                int *variables_initialized,
+                                int *active_circuits,
+                                int *variables_values,
+                                int *equation_number);
 
 #endif //PWZADANIE3_CIRCUIT_H
