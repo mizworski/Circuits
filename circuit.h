@@ -100,4 +100,8 @@ int read_resolve_initialization(ddag *dependency_graph,
                                 long *variables_values,
                                 int *equation_number);
 
+void spawn_tree(int var_index, dnode *variables, int var_pipes[][2]);
+
+void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]);
+
 #endif //PWZADANIE3_CIRCUIT_H

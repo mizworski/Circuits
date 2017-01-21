@@ -5,9 +5,11 @@
 
 #include "circuit.h"
 
-void spawn_tree(int var_index, dnode *variables, int pipes[][2]);
+void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]);
 
-void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]);
+void spawn_variable_node(const enode *node, int var_pipes[][2], char *var_value);
+
+void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string);
 
 enode *parse_binary_operation(char *expression,
                               size_t expression_length,
@@ -157,7 +159,6 @@ void parse_single_equation(char *expression, size_t expression_length, ddag *dgr
 }
 
 int main() {
-    // todo read input
     unsigned int rows_number;
     unsigned int circuit_equations_number;
     unsigned int variables_count;
@@ -247,15 +248,108 @@ int main() {
 
 void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]) {
     char var_value[BUFF_SIZE];
-    sprintf(var_value,"%ld", variables_values[var_index]);
+    sprintf(var_value, "%ld", variables_values[var_index]);
 
     if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
         syserr("Error while writing\n");
     }
 }
 
-void spawn_tree(int var_index, dnode *variables, int pipes[][2]) {
+void spawn_tree(int var_index, dnode *variables, int var_pipes[][2]) {
+    int pipe_down[2];
+    if (pipe(pipe_down) == -1) {
+        syserr("Error in pipe\n");
+    }
 
+    enode *root = variables[var_index].expression;
+
+    spawn_circuit_node(root, pipe_down, var_pipes);
+
+    char var_value[BUFF_SIZE];
+
+    if (close(pipe_down[1]) == -1) {
+        syserr("Error while closing pipe_down[1]\n");
+    }
+
+    if (read(pipe_down[0], var_value, BUFF_SIZE) == -1) {
+        syserr("Error while reading\n");
+    }
+
+    if (close(pipe_down[0]) == -1) {
+        syserr("Error while closing pipe_down[0]\n");
+    }
+
+    if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
+        syserr("Error while writing\n");
+    }
+}
+
+void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]) {
+    // todo close grandfather pipe
+
+    char var_value[BUFF_SIZE];
+
+    if (close(pipe_up[0]) == -1) {
+        syserr("Error while closing pipe_up[0]\n");
+    }
+
+    if (node->operation_code == VALUE_CODE) {
+        sprintf(var_value, "%ld", node->value);
+    } else if (node->operation_code == VARIABLE_CODE) {
+        spawn_variable_node(node, var_pipes, var_value);
+    } else if (node->operation_code == '-') {
+        spawn_negate_node(node, var_pipes, var_value);
+    } else if (node->operation_code == '*')
+
+        /// Writing results to pipe_up.
+        if (write(pipe_up[1], var_value, BUFF_SIZE) == -1) {
+            syserr("Error while writing\n");
+        }
+
+    if (close(pipe_up[1]) == -1) {
+        syserr("Error while closing pipe_up[1]\n");
+    }
+}
+
+void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) {
+    int pipe_down[2];
+    if (pipe(pipe_down) == -1) {
+        syserr("Error in pipe\n");
+    }
+
+    spawn_circuit_node(node->left_son, pipe_down, var_pipes);
+
+    if (close(pipe_down[1]) == -1) {
+        syserr("Error while closing pipe_down[1]\n");
+    }
+
+    if (read(pipe_down[0], var_string, BUFF_SIZE) == -1) {
+        syserr("Error while reading\n");
+    }
+
+    if (close(pipe_down[0]) == -1) {
+        syserr("Error while closing pipe_down[0]\n");
+    }
+
+    long var_value;// = atoi(result_string);
+    sscanf(var_string, "%ld", &var_value);
+
+    var_value *= -1;
+
+    sprintf(var_string, "%ld", var_value);
+}
+
+void spawn_variable_node(const enode *node, int var_pipes[][2], char *var_value) {
+    long var_index = node->value;
+
+    if (read(var_pipes[var_index][0], var_value, BUFF_SIZE) == -1) {
+        syserr("Error while reading\n");
+    }
+
+    //todo do i have to write back value to buffer? (multiple access)
+    if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
+        syserr("Error while writing\n");
+    }
 }
 
 int read_resolve_initialization(ddag *dependency_graph,
