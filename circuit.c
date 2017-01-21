@@ -11,7 +11,7 @@ void spawn_variable_node(const enode *node, int var_pipes[][2], char *var_value)
 
 void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string);
 
-void spawn_binary_node(enode *node, int var_pipes[][2], char *var_string);
+int spawn_binary_node(enode *node, int var_pipes[][2], char *var_string);
 
 enode *parse_binary_operation(char *expression,
                               size_t expression_length,
@@ -312,8 +312,6 @@ void spawn_tree(int var_index, dnode *variables, int var_pipes[][2]) {
         case -1:
             syserr("Error in fork\n");
         case 0:
-//            printf("Spawned main node\n");
-//            printf("Spawned main node (%d), (%p)\n", var_index, root);
             spawn_circuit_node(root, pipe_down, var_pipes);
             return;
         default:
@@ -347,43 +345,52 @@ void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]) {
         syserr("Error while closing pipe_up[0]\n");
     }
 
+//    printf("%d", node->operation_code);
+
+    int ret_code = 1;
+
     if (node->operation_code == VALUE_CODE) {
         sprintf(var_value, "%ld", node->value);
     } else if (node->operation_code == VARIABLE_CODE) {
         spawn_variable_node(node, var_pipes, var_value);
     } else if (node->operation_code == '-') {
         spawn_negate_node(node, var_pipes, var_value);
-    } else if (node->operation_code == '*') {
-        spawn_binary_node(node, var_pipes, var_value);
+    } else if (node->operation_code == '*' || node->operation_code == '+') {
+        ret_code = spawn_binary_node(node, var_pipes, var_value);
     }
 
+    if (ret_code == 1) {
 //    printf("Waiting for results main node\n");
-    /// Writing results to pipe_up.
-    if (write(pipe_up[1], var_value, BUFF_SIZE) == -1) {
-        syserr("Error while writing ddd\n");
+        /// Writing results to pipe_up.
+        if (write(pipe_up[1], var_value, BUFF_SIZE) == -1) {
+            syserr("Error while writing %d\n", node->operation_code);
+        }
+
+        if (close(pipe_up[1]) == -1) {
+            syserr("Error while closing pipe_up[1]\n");
+        }
     }
 
-    if (close(pipe_up[1]) == -1) {
-        syserr("Error while closing pipe_up[1]\n");
-    }
 }
 
-void spawn_binary_node(enode *node, int var_pipes[][2], char *var_string) {
+int spawn_binary_node(enode *node, int var_pipes[][2], char *var_string) {
     int pipe_down_left[2];
     if (pipe(pipe_down_left) == -1) {
         syserr("Error in pipe\n");
     }
-    int pipe_down_right[2];
-    if (pipe(pipe_down_right) == -1) {
-        syserr("Error in pipe\n");
-    }
+
     switch (fork()) {
         case -1:
             syserr("Error in fork\n");
         case 0:
             spawn_circuit_node(node->left_son, pipe_down_left, var_pipes);
-            return;
+            return 0;
         default:;
+    }
+
+    int pipe_down_right[2];
+    if (pipe(pipe_down_right) == -1) {
+        syserr("Error in pipe\n");
     }
 
     switch (fork()) {
@@ -391,18 +398,14 @@ void spawn_binary_node(enode *node, int var_pipes[][2], char *var_string) {
             syserr("Error in fork\n");
         case 0:
             spawn_circuit_node(node->right_son, pipe_down_right, var_pipes);
-            return;
+            return 0;
         default:;
-    }
-
-    if (close(pipe_down_left[1]) == -1) {
-        syserr("Error while closing pipe_down[1]\n");
     }
 
     char left_val_string[BUFF_SIZE];
 
     if (read(pipe_down_left[0], left_val_string, BUFF_SIZE) == -1) {
-        syserr("Error while reading\n");
+        syserr("Error while reading dddd\n");
     }
 
     if (close(pipe_down_left[0]) == -1) {
@@ -410,7 +413,7 @@ void spawn_binary_node(enode *node, int var_pipes[][2], char *var_string) {
     }
 
     long left_val;
-    sscanf(var_string, "%ld", &left_val);
+    sscanf(left_val_string, "%ld", &left_val);
 
     char right_val_string[BUFF_SIZE];
 
@@ -440,6 +443,8 @@ void spawn_binary_node(enode *node, int var_pipes[][2], char *var_string) {
 
     if (wait(0) == -1)
         syserr("Error in wait\n");
+
+    return 1;
 }
 
 void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) {
