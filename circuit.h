@@ -94,4 +94,23 @@ void spawn_tree(int var_index, dnode *variables, int var_pipes[][2]);
 
 void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]);
 
+void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]);
+
+void spawn_variable_node(const enode *node, int var_pipes[][2], char *var_value);
+
+void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string);
+
+int spawn_binary_node(enode *node, int var_pipes[][2], char *var_string);
+
+void process_single_input(unsigned int variables_count, const ddag *dependency_graph, const int *active_circuits,
+                          const long *variables_values, int equation_number);
+
+void release_memory(ddag *dependencies);
+
+void release_variable(dnode variable);
+
+void release_expression(enode *expression);
+
+void release_dependency_list(dlist *list_element);
+
 #endif //PWZADANIE3_CIRCUIT_H
