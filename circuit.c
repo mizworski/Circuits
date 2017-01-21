@@ -11,6 +11,8 @@ void spawn_variable_node(const enode *node, int var_pipes[][2], char *var_value)
 
 void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string);
 
+void spawn_binary_node(enode *node, int var_pipes[][2], char *var_string);
+
 enode *parse_binary_operation(char *expression,
                               size_t expression_length,
                               unsigned int dependent_variables[],
@@ -222,7 +224,15 @@ int main() {
                 if (active_circuits[j] == LEAF) {
                     put_val_into_pipe(j, variables_values, var_pipes);
                 } else if (active_circuits[j] == ACTIVE) {
-                    spawn_tree(i, dependency_graph->variables, var_pipes);
+                    switch (fork()) {
+                        case -1:
+                            syserr("Error in fork\n");
+                        case 0:
+                            spawn_tree(i, dependency_graph->variables, var_pipes);
+                            return 1;
+                        default:
+                            continue;
+                    }
                 }
             }
 
@@ -261,26 +271,30 @@ void spawn_tree(int var_index, dnode *variables, int var_pipes[][2]) {
         syserr("Error in pipe\n");
     }
 
-    enode *root = variables[var_index].expression;
-
-    spawn_circuit_node(root, pipe_down, var_pipes);
-
     char var_value[BUFF_SIZE];
 
-    if (close(pipe_down[1]) == -1) {
-        syserr("Error while closing pipe_down[1]\n");
-    }
+    enode *root = variables[var_index].expression;
+    switch (fork()) {
+        case -1:
+            syserr("Error in fork\n");
+        case 0:
+            spawn_circuit_node(root, pipe_down, var_pipes);
+        default:
+            if (close(pipe_down[1]) == -1) {
+                syserr("Error while closing pipe_down[1]\n");
+            }
 
-    if (read(pipe_down[0], var_value, BUFF_SIZE) == -1) {
-        syserr("Error while reading\n");
-    }
+            if (read(pipe_down[0], var_value, BUFF_SIZE) == -1) {
+                syserr("Error while reading\n");
+            }
 
-    if (close(pipe_down[0]) == -1) {
-        syserr("Error while closing pipe_down[0]\n");
-    }
+            if (close(pipe_down[0]) == -1) {
+                syserr("Error while closing pipe_down[0]\n");
+            }
 
-    if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
-        syserr("Error while writing\n");
+            if (write(var_pipes[var_index][1], var_value, BUFF_SIZE) == -1) {
+                syserr("Error while writing\n");
+            }
     }
 }
 
@@ -299,16 +313,72 @@ void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]) {
         spawn_variable_node(node, var_pipes, var_value);
     } else if (node->operation_code == '-') {
         spawn_negate_node(node, var_pipes, var_value);
-    } else if (node->operation_code == '*')
+    } else if (node->operation_code == '*') {
+        spawn_binary_node(node, var_pipes, var_value);
+    }
 
-        /// Writing results to pipe_up.
-        if (write(pipe_up[1], var_value, BUFF_SIZE) == -1) {
-            syserr("Error while writing\n");
-        }
+    /// Writing results to pipe_up.
+    if (write(pipe_up[1], var_value, BUFF_SIZE) == -1) {
+        syserr("Error while writing\n");
+    }
 
     if (close(pipe_up[1]) == -1) {
         syserr("Error while closing pipe_up[1]\n");
     }
+}
+
+void spawn_binary_node(enode *node, int var_pipes[][2], char *var_string) {
+    int pipe_down_left[2];
+    if (pipe(pipe_down_left) == -1) {
+        syserr("Error in pipe\n");
+    }
+    int pipe_down_right[2];
+    if (pipe(pipe_down_right) == -1) {
+        syserr("Error in pipe\n");
+    }
+
+    spawn_circuit_node(node->left_son, pipe_down_left, var_pipes);
+    spawn_circuit_node(node->right_son, pipe_down_right, var_pipes);
+
+    if (close(pipe_down_left[1]) == -1) {
+        syserr("Error while closing pipe_down[1]\n");
+    }
+
+    char left_val_string[BUFF_SIZE];
+
+    if (read(pipe_down_left[0], left_val_string, BUFF_SIZE) == -1) {
+        syserr("Error while reading\n");
+    }
+
+    if (close(pipe_down_left[0]) == -1) {
+        syserr("Error while closing pipe_down[0]\n");
+    }
+
+    long left_val;
+    sscanf(var_string, "%ld", &left_val);
+
+    char right_val_string[BUFF_SIZE];
+
+    if (read(pipe_down_right[0], right_val_string, BUFF_SIZE) == -1) {
+        syserr("Error while reading\n");
+    }
+
+    if (close(pipe_down_right[0]) == -1) {
+        syserr("Error while closing pipe_down[0]\n");
+    }
+
+    long right_val;
+    sscanf(right_val_string, "%ld", &right_val);
+
+    long res_val;
+
+    if (node->operation_code == '*') {
+        res_val = left_val * right_val;
+    } else {
+        res_val = left_val + right_val;
+    }
+
+    sprintf(var_string, "%ld", res_val);
 }
 
 void spawn_negate_node(const enode *node, int var_pipes[][2], char *var_string) {
