@@ -125,15 +125,17 @@ enode *parse_expression(char *expression,
 
 void parse_single_equation(char *expression, size_t expression_length, ddag *dgraph, unsigned int variables_count) {
     int variable_index;
-    sscanf(expression, "x[%d]", &variable_index);
+    int chars_read;
+
+    sscanf(expression, "x[%d] = %n", &variable_index, &chars_read);
 
     unsigned int dependent_variables[variables_count];
     memset(dependent_variables, 0, sizeof dependent_variables);
 
     dnode *node = &dgraph->variables[variable_index];
 
-    expression += 7;
-    expression_length -= 7;
+    expression += chars_read;
+    expression_length -= chars_read;
 
     node->expression = parse_expression(expression,
                                         expression_length,
@@ -601,6 +603,7 @@ int main() {
 
         if (is_cycled(dependency_graph) == 1) {
             fprintf(stdout, "%d F", equation_number);
+            release_memory(dependency_graph);
             return 42;
         }
         fprintf(stdout, "%d P\n", equation_number);
@@ -610,6 +613,7 @@ int main() {
 
     if (dependency_graph->variables[0].expression == NULL) {
         fprintf(stdout, "%d F", circuit_equations_number + 1);
+        release_memory(dependency_graph);
         return 42;
     }
 
