@@ -246,6 +246,7 @@ void process_single_input(unsigned int variables_count, const ddag *dependency_g
     long result_val;
     sscanf(result_string, "%ld", &result_val);
     fprintf(stdout, "%d P %ld\n", equation_number, result_val);
+    fflush(stdout);
 }
 
 void put_val_into_pipe(const int var_index, const long *variables_values, int var_pipes[][2]) {
@@ -607,26 +608,30 @@ int main() {
         scanf("%u ", &equation_number);
 
         if (read_parse_equation(variables_count, dependency_graph) == -1) {
-            fprintf(stdout, "%d F", equation_number);
+            fprintf(stdout, "%d F\n", equation_number);
+            fflush(stdout);
             release_memory(dependency_graph);
             return 42;
         }
 
         if (is_cycled(dependency_graph) == 1) {
-            fprintf(stdout, "%d F", equation_number);
+            fprintf(stdout, "%d F\n", equation_number);
+            fflush(stdout);
             release_memory(dependency_graph);
             return 42;
         }
         fprintf(stdout, "%d P\n", equation_number);
+        fflush(stdout);
     }
 
-    fflush(stdout);
 
     if (dependency_graph->variables[0].expression == NULL) {
         fprintf(stdout, "%d F", circuit_equations_number + 1);
         release_memory(dependency_graph);
         return 42;
     }
+
+    fflush(stdout);
 
     unsigned int valid_inputs = 0;
 
@@ -659,6 +664,7 @@ int main() {
             }
         } else {
             fprintf(stdout, "%d F\n", equation_number);
+            fflush(stdout);
         }
     }
 
