@@ -64,14 +64,14 @@ enode *parse_expression(char *expression,
                         unsigned int dependent_variables[],
                         unsigned int variables_count);
 
-void parse_single_equation(char *expression, size_t expression_length, ddag *variables, unsigned int variables_count);
+int parse_single_equation(char *expression, size_t expression_length, ddag *variables, unsigned int variables_count);
 
 
 void set_variables(unsigned int variables_count, dnode *variables);
 
 ddag *initialize_dependency_graph(unsigned int count);
 
-void read_parse_equation(unsigned int variables_count, ddag *dependency_graph);
+int read_parse_equation(unsigned int variables_count, ddag *dependency_graph);
 
 int is_cycled(ddag *dependency_graph);
 

@@ -123,7 +123,7 @@ enode *parse_expression(char *expression,
     }
 }
 
-void parse_single_equation(char *expression, size_t expression_length, ddag *dgraph, unsigned int variables_count) {
+int parse_single_equation(char *expression, size_t expression_length, ddag *dgraph, unsigned int variables_count) {
     int variable_index;
     int chars_read;
 
@@ -133,6 +133,10 @@ void parse_single_equation(char *expression, size_t expression_length, ddag *dgr
     memset(dependent_variables, 0, sizeof dependent_variables);
 
     dnode *node = &dgraph->variables[variable_index];
+
+    if (node->expression != NULL) {
+        return -1;
+    }
 
     expression += chars_read;
     expression_length -= chars_read;
@@ -155,6 +159,8 @@ void parse_single_equation(char *expression, size_t expression_length, ddag *dgr
     }
 
     *tail = NULL;
+
+    return 1;
 }
 
 void release_memory(ddag *dependencies) {
@@ -283,14 +289,13 @@ void spawn_tree(int var_index, dnode *variables, int var_pipes[][2]) {
                 syserr("Error while writing\n");
             }
 
-            if (wait(0) == -1)
+            if (wait(0) == -1) {
                 syserr("Error in wait\n");
+            }
     }
 }
 
 void spawn_circuit_node(enode *node, int pipe_up[2], int var_pipes[][2]) {
-    // todo close grandfather pipe
-
     char var_value[BUFF_SIZE];
 
     if (close(pipe_up[0]) == -1) {
@@ -547,7 +552,7 @@ int dfs_cycle_search(int v, dnode *vertices, unsigned int vertices_visited[]) {
     return 0;
 }
 
-void read_parse_equation(unsigned int variables_count, ddag *dependency_graph) {
+int read_parse_equation(unsigned int variables_count, ddag *dependency_graph) {
     char *expression = NULL;
     char *to_release;
     size_t len = 0;
@@ -561,9 +566,11 @@ void read_parse_equation(unsigned int variables_count, ddag *dependency_graph) {
     expression_length = (size_t) read;
     expression[expression_length - 1] = 0;
 
-    parse_single_equation(expression, expression_length, dependency_graph, variables_count);
+    int ret_val = parse_single_equation(expression, expression_length, dependency_graph, variables_count);
 
     free(to_release);
+
+    return ret_val;
 }
 
 ddag *initialize_dependency_graph(unsigned int variables_count) {
@@ -599,7 +606,11 @@ int main() {
         unsigned int equation_number;
         scanf("%u ", &equation_number);
 
-        read_parse_equation(variables_count, dependency_graph);
+        if (read_parse_equation(variables_count, dependency_graph) == -1) {
+            fprintf(stdout, "%d F", equation_number);
+            release_memory(dependency_graph);
+            return 42;
+        }
 
         if (is_cycled(dependency_graph) == 1) {
             fprintf(stdout, "%d F", equation_number);
