@@ -626,7 +626,7 @@ int main() {
 
 
     if (dependency_graph->variables[0].expression == NULL) {
-        fprintf(stdout, "%d F", circuit_equations_number + 1);
+        fprintf(stdout, "%d F\n", circuit_equations_number + 1);
         release_memory(dependency_graph);
         return 42;
     }
